@@ -21,7 +21,6 @@ app.use(express.json())
 
 // Add this after other middleware setup
 app.use((req, res, next) => {
-    console.log('Request Body:', req.body);
     next();
 });
 
