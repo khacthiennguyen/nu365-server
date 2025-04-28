@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "name": "nu365-server",
   "version": "1.0.0",
   "main": "server.js",

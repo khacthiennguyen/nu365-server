@@ -5,6 +5,13 @@ import bcrypt from "bcrypt"
 
 const router = express.Router()
 
+// Update the formatExpiry function to use server time standard
+const formatExpiry = (timestamp) => {
+  if (!timestamp) return null;
+  const date = new Date(timestamp * 1000); // Convert seconds to milliseconds
+  return date.toISOString(); // Returns ISO format: "2025-04-26T12:24:30.000Z"
+}
+
 // Register a new user
 router.post("/register", async (req, res) => {
   try {
@@ -24,45 +31,31 @@ router.post("/register", async (req, res) => {
       })
     }
 
-    // Hash the password
-    const saltRounds = 10
-    const hashedPassword = await bcrypt.hash(password, saltRounds)
-
     // Register user with Supabase
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
-      password, // Supabase handles password hashing internally
+      password,
       options: {
         data: {
-          name,
+          full_name: name,
+          name: name,
           twoFactorEnabled: false,
           biometricEnabled: false,
+          email_verified: true 
         },
         emailRedirectTo: `${process.env.CLIENT_URL}/auth/callback`,
-        emailConfirm: false // Thêm dòng này để bỏ qua xác thực email
+        emailConfirm: false
       },
     })
 
     if (authError) {
-      return res.status(400).json({ error: authError.message })
-    }
-
-    // Create user profile in the database
-    const { error: profileError } = await supabase.from("profiles").upsert(
-      {
-        id: authData.user.id,
-        email: email,
-        name: name,
-        twoFactorEnabled: false,
-        biometricEnabled: false,
-        created_at: new Date(),
-      },
-      { onConflict: "id" },
-    )
-
-    if (profileError) {
-      console.error("Error creating user profile:", profileError)
-      // Continue anyway since Supabase might create the profile via trigger
+      return res.status(400).json({
+        error: true,
+        success: false,
+        code: 4003,
+        httpStatus: 400,
+        message: authError.message
+      })
     }
 
     // Remove sensitive data before sending response
@@ -77,7 +70,7 @@ router.post("/register", async (req, res) => {
       success: true,
       code: 2001,
       httpStatus: 201,
-      message: "Registration successful. Please check your email for verification.",
+      message: "Registration successful",
       payload: safeUserData
     })
   } catch (error) {
@@ -93,10 +86,23 @@ router.post("/register", async (req, res) => {
   }
 })
 
-// Login user
+// Login user 
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body
+    console.log("Login request body:", req.body);
+    
+    // Kiểm tra nếu body không tồn tại hoặc rỗng
+    if (!req.body) {
+      return res.status(400).json({
+        error: true,
+        success: false,
+        code: 1002,
+        httpStatus: 400,
+        message: "Request body is missing"
+      });
+    }
+    
+    const { email, password } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({
@@ -104,15 +110,19 @@ router.post("/login", async (req, res) => {
         success: false,
         code: 1002,
         httpStatus: 400,
-        message: "Email and password are required"
-      })
+        message: "Email and password are required",
+        meta: { received: req.body ? Object.keys(req.body) : [] }
+      });
     }
 
-    // Sign in with Supabase
+    // Sign in with Supabase with explicit 3-day expiration
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
-    })
+      options: {
+        expiresIn: 60 * 60 * 24 * 3 // 3 days in seconds (60s * 60m * 24h * 3d)
+      }
+    });
 
     if (error) {
       if (error.message.includes("Email not confirmed")) {
@@ -123,7 +133,7 @@ router.post("/login", async (req, res) => {
           httpStatus: 401,
           message: "Email chưa được xác thực. Vui lòng kiểm tra email và xác thực tài khoản.",
           meta: { code: "EMAIL_NOT_VERIFIED" }
-        })
+        });
       }
       return res.status(401).json({
         error: true,
@@ -131,7 +141,7 @@ router.post("/login", async (req, res) => {
         code: 4002,
         httpStatus: 401,
         message: error.message
-      })
+      });
     }
 
     if (!data.user.email_confirmed_at) {
@@ -142,38 +152,51 @@ router.post("/login", async (req, res) => {
         httpStatus: 401,
         message: "Email chưa được xác thực. Vui lòng kiểm tra email và xác thực tài khoản.",
         meta: { code: "EMAIL_NOT_VERIFIED" }
-      })
+      });
     }
 
     // Check if 2FA is enabled for this user
     const { data: userData } = await supabase
       .from("profiles")
-      .select("twoFactorEnabled")
+      .select("twoFactorEnabled, name")
       .eq("id", data.user.id)
-      .single()
+      .single();
 
     // Create a safe user object without sensitive data
     const safeUserData = {
       id: data.user.id,
       email: data.user.email,
-      // Include other non-sensitive user data
-    }
+      name: userData?.name || data.user.user_metadata?.name || data.user.user_metadata?.full_name || ''
+    };
+
+    // Chuyển đổi ISO Date String thành timestamp (seconds) cho phù hợp với model Flutter
+    const expiryDate = new Date(data.session.expires_at * 1000);
+    const expiryTimestamp = Math.floor(expiryDate.getTime() / 1000);
 
     if (userData?.twoFactorEnabled) {
       // Generate TOTP for 2FA
-      const totpSecret = await generateTOTP(data.user.id)
+      const totpSecret = await generateTOTP(data.user.id);
 
       return res.status(200).json({
+        error: false,
+        success: true,
+        code: 2006,
+        httpStatus: 200,
         message: "2FA required",
-        requiresTwoFactor: true,
-        session: {
-          access_token: data.session.access_token,
-          expires_at: data.session.expires_at,
-        },
-        user: safeUserData,
-      })
+        meta: { requiresTwoFactor: true },
+        payload: {
+          
+          session: {
+            access_token: data.session.access_token,
+            expires_at: expiryTimestamp
+          },
+          user: safeUserData
+        }
+      });
     }
 
+    // Standard success response matching Flutter Credential model structure
+    // Đã xóa trường message trong payload
     return res.status(200).json({
       error: false,
       success: true,
@@ -181,22 +204,24 @@ router.post("/login", async (req, res) => {
       httpStatus: 200,
       message: "Login successful",
       payload: {
+        // Đã xóa trường message ở đây
         session: {
           access_token: data.session.access_token,
-          expires_at: data.session.expires_at,
+          expires_at: expiryTimestamp
         },
         user: safeUserData
       }
-    })
+    });
   } catch (error) {
-    console.error("Login error:", error)
+    console.error("Login error:", error);
+    console.error("Request Body:", req.body);
     return res.status(500).json({
       error: true,
       success: false,
       code: 5002,
       httpStatus: 500,
-      message: "Server error during login"
-    })
+      message: "Server error during login: " + error.message
+    });
   }
 })
 

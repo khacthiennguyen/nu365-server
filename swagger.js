@@ -5,9 +5,9 @@ const options = {
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "Flutter Auth API",
+      title: "Nu365 API",
       version: "1.0.0",
-      description: "API documentation for Flutter Authentication Server"
+      description: "API documentation for Nu365 Authentication Server "
     },
     components: {
       schemas: {

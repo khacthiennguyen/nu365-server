@@ -42,8 +42,11 @@ app.get("/", (req, res) => {
   res.send('Flutter Auth API Server is running. Visit <a href="/api-docs">API Documentation</a>')
 })
 
+
 // Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`)
-  console.log(`API Documentation available at http://localhost:${PORT}/api-docs`)
+const server = app.listen(PORT, '0.0.0.0', () => {
+  const { address, port } = server.address();
+  console.log(`Server running on http://${address === '::' ? 'localhost' : address}:${port}`);
+  console.log(`API Documentation available at http://${address === '::' ? 'localhost' : address}:${port}/api-docs`);
 })
+
