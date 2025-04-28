@@ -19,15 +19,10 @@ const PORT = process.env.PORT || 3000
 app.use(cors())
 app.use(express.json())
 
-// Add this after other middleware setup
-app.use((req, res, next) => {
-    next();
-});
-
 // Initialize Supabase client
 export const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
 
-// Swagger UI - Add as a route on the main server
+// Swagger UI
 app.use("/api-docs", swagger.swaggerUi.serve, swagger.swaggerUi.setup(swagger.specs))
 
 // Routes
@@ -41,11 +36,9 @@ app.get("/", (req, res) => {
   res.send('Flutter Auth API Server is running. Visit <a href="/api-docs">API Documentation</a>')
 })
 
-
 // Start server
-const server = app.listen(PORT, '0.0.0.0', () => {
-  const { address, port } = server.address();
-  console.log(`Server running on http://${address === '::' ? 'localhost' : address}:${port}`);
-  console.log(`API Documentation available at http://${address === '::' ? 'localhost' : address}:${port}/api-docs`);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`)
+  console.log(`API Documentation available at http://localhost:${PORT}/api-docs`)
 })
 
