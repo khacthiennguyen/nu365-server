@@ -65,6 +65,23 @@ router.post("/register", async (req, res) => {
       name: name,
     }
 
+    // Thêm người dùng vào bảng users
+    const { data, error } = await supabase
+      .from('users')
+      .insert([
+        { 
+          userId: authData.user.id,
+          userName: name,
+          email: authData.user.email
+        },
+      ])
+      .select()
+
+    if (error) {
+      console.error("Error inserting into users table:", error);
+      // Vẫn tiếp tục vì người dùng đã được tạo trong auth
+    }
+
     return res.status(201).json({
       error: false,
       success: true,
