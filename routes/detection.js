@@ -1,10 +1,8 @@
 // routes/detection.js
 import express from 'express'
 import multer from 'multer'
-import axios from 'axios'
 import fs from 'fs'
 import path from 'path'
-import FormData from 'form-data'
 import sharp from 'sharp'
 
 const router = express.Router()
@@ -52,7 +50,7 @@ router.post('/detect', upload.single('image'), async (req, res) => {
     }
 
     const imagePath = req.file.path
-    const roboflowApiKey = process.env.ROBOFLOW_API_KEY 
+    const roboflowApiKey = process.env.ROBOFLOW_API_KEY || 'HOa3QOzi68BGifDa99cx'
     
     // Resize image to exactly 640x640 pixels
     const resizedImagePath = imagePath + '_resized.jpg'
@@ -71,14 +69,13 @@ router.post('/detect', upload.single('image'), async (req, res) => {
     // Convert buffer to base64
     const base64Image = imageBuffer.toString('base64')
     
-    // Use the correct Roboflow Workflows API endpoint
-    const response = await axios({
+    // Use fetch API with the Roboflow Workflows API endpoint
+    const response = await fetch('https://serverless.roboflow.com/infer/workflows/k5vers-vision/nu365', {
       method: 'POST',
-      url: 'https://serverless.roboflow.com/infer/workflows/k5vers-vision/nu365',
       headers: {
         'Content-Type': 'application/json'
       },
-      data: {
+      body: JSON.stringify({
         api_key: roboflowApiKey,
         inputs: {
           "image": {
@@ -86,9 +83,11 @@ router.post('/detect', upload.single('image'), async (req, res) => {
             "value": base64Image
           }
         }
-      }
+      })
     })
 
+    const result = await response.json()
+    
     // Delete the original and resized image files after sending
     fs.unlinkSync(imagePath)
     fs.unlinkSync(resizedImagePath)
@@ -100,7 +99,7 @@ router.post('/detect', upload.single('image'), async (req, res) => {
       code: 2301,
       httpStatus: 200,
       message: "Image detection successful",
-      payload: response.data
+      payload: result
     })
   } catch (error) {
     console.error("Image detection error:", error)

@@ -2,14 +2,15 @@
  * @swagger
  * tags:
  *   name: Detection
- *   description: Image detection endpoints using Roboflow API
+ *   description: Image detection endpoints using Roboflow Workflows API
  */
 
 /**
  * @swagger
  * /api/detection/detect:
  *   post:
- *     summary: Detect objects in an image
+ *     summary: Detect objects in an image using Roboflow Workflows
+ *     description: Uploads an image, resizes it to 640x640, and sends it as base64 to Roboflow Workflows API for object detection
  *     tags: [Detection]
  *     security:
  *       - bearerAuth: []
@@ -25,7 +26,7 @@
  *               image:
  *                 type: string
  *                 format: binary
- *                 description: Image file to detect objects in
+ *                 description: Image file to detect objects in (max size 10MB, only image files allowed)
  *     responses:
  *       200:
  *         description: Image detection successful
@@ -35,6 +36,10 @@
  *               allOf:
  *                 - $ref: '#/components/schemas/BaseResponse'
  *                 - type: object
+ *                   properties:
+ *                     payload:
+ *                       type: object
+ *                       description: Roboflow Workflows API response data containing prediction results
  *                   example:
  *                     error: false
  *                     success: true
@@ -43,21 +48,13 @@
  *                     message: "Image detection successful"
  *                     payload:
  *                       predictions:
- *                         - label: "apple"
+ *                         - x: 320
+ *                           y: 320
+ *                           width: 640
+ *                           height: 640
+ *                           class: "detected_object"
  *                           confidence: 0.95
- *                           x: 125
- *                           y: 150
- *                           width: 50
- *                           height: 50
- *                         - label: "banana"
- *                           confidence: 0.88
- *                           x: 200
- *                           y: 100
- *                           width: 60
- *                           height: 30
- *                       image:
- *                         width: 640
- *                         height: 480
+ *                       time: 0.123
  *       400:
  *         description: Bad request
  *         content:
@@ -100,4 +97,5 @@
  *                     code: 5301
  *                     httpStatus: 500
  *                     message: "Server error during image detection"
+ *                     payload: "Error message details"
  */
