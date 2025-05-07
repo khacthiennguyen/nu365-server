@@ -3,7 +3,6 @@ import cors from "cors"
 import dotenv from "dotenv"
 import { createClient } from "@supabase/supabase-js"
 import authRoutes from "./routes/auth.js"
-import verificationRoutes from "./routes/verification.js"
 import biometricRoutes from "./routes/biometric.js"
 import detectionRoutes from "./routes/detection.js"
 import swagger from "./swagger.js"
@@ -27,7 +26,6 @@ app.use("/api-docs", swagger.swaggerUi.serve, swagger.swaggerUi.setup(swagger.sp
 
 // Routes
 app.use("/api/auth", authRoutes)
-app.use("/api/verification", verificationRoutes)
 app.use("/api/biometric", biometricRoutes)
 app.use("/api/detection", detectionRoutes)
 
