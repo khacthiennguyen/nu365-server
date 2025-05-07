@@ -1,19 +1,15 @@
 import speakeasy from "speakeasy"
-import qrcode from "qrcode"
 
 // Generate TOTP secret and QR code
-export const generateTOTP = async (userId) => {
+export const generateTOTP = async (email) => {
   // Generate a secret
   const secret = speakeasy.generateSecret({
-    name: `FlutterAuthApp:${userId}`,
+    name: `NU365:${email}`,
   })
-
-  // Generate QR code
-  const qrCodeUrl = await qrcode.toDataURL(secret.otpauth_url)
 
   return {
     secret: secret.base32,
-    qrCodeUrl,
+    otpauth_url: secret.otpauth_url,
   }
 }
 
