@@ -104,8 +104,7 @@ router.post("/register", async (req, res) => {
 })
 
 // Login user 
-router.post("/login", async (req, res) => {
-  try {
+router.post("/login", async (req, res) => {  try {
     console.log("Login request body:", req.body);
     
     // Kiểm tra nếu body không tồn tại hoặc rỗng
@@ -130,14 +129,12 @@ router.post("/login", async (req, res) => {
         message: "Email and password are required",
         meta: { received: req.body ? Object.keys(req.body) : [] }
       });
-    }
-
-    // Sign in with Supabase with explicit 3-day expiration
+    }    // Sign in with Supabase with explicit 30-day expiration (tăng từ 3 ngày lên 30 ngày để test)
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
       options: {
-        expiresIn: 60 * 60 * 24 * 3 // 3 days in seconds (60s * 60m * 24h * 3d)
+        expiresIn: 60 * 60 * 24 * 30 // 30 days in seconds (60s * 60m * 24h * 30d)
       }
     });
 
@@ -200,18 +197,27 @@ router.post("/login", async (req, res) => {
         message: "2FA is enabled for this account. Please use the login-with-otp endpoint instead.",
         meta: { requiresTwoFactor: true }
       });
-    }
-
-    // Create a safe user object without sensitive data
+    }    // Create a safe user object without sensitive data
     const safeUserData = {
       id: data.user.id,
       email: data.user.email,
       name: userData?.userName || data.user.user_metadata?.name || data.user.user_metadata?.full_name || ''
-    };
-
-    // Chuyển đổi ISO Date String thành timestamp (seconds) cho phù hợp với model Flutter
-    const expiryDate = new Date(data.session.expires_at);
-    const expiryTimestamp = Math.floor(expiryDate.getTime() / 1000);
+    };    // Xử lý đúng expires_at để đảm bảo luôn trả về timestamp (seconds)
+    let expiryTimestamp;
+    
+    // Kiểm tra nếu expires_at là chuỗi ISO
+    if (typeof data.session.expires_at === 'string' && data.session.expires_at.includes('T')) {
+      const expiryDate = new Date(data.session.expires_at);
+      expiryTimestamp = Math.floor(expiryDate.getTime() / 1000);
+    } 
+    // Kiểm tra nếu expires_at đã là timestamp (giây)
+    else if (typeof data.session.expires_at === 'number') {
+      expiryTimestamp = data.session.expires_at;
+    }
+    // Trường hợp khác, sử dụng Unix timestamp hiện tại + 3 ngày
+    else {
+      expiryTimestamp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 3; // Hiện tại + 3 ngày
+    }
 
     // Standard success response matching Flutter Credential model structure
     return res.status(200).json({
@@ -652,14 +658,12 @@ router.post("/login-with-otp", async (req, res) => {
         httpStatus: 400,
         message: "Email, password and OTP are required"
       });
-    }
-
-    // Sign in with Supabase 
+    }    // Sign in with Supabase with explicit 30-day expiration (tăng từ 3 ngày lên 30 ngày để test)
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
       options: {
-        expiresIn: 60 * 60 * 24 * 3 // 3 days in seconds (60s * 60m * 24h * 3d)
+        expiresIn: 60 * 60 * 24 * 30 // 30 days in seconds (60s * 60m * 24h * 30d)
       }
     });
 
@@ -723,18 +727,27 @@ router.post("/login-with-otp", async (req, res) => {
         httpStatus: 401,
         message: "Invalid OTP code"
       });
-    }
-
-    // Create a safe user object without sensitive data
+    }    // Create a safe user object without sensitive data
     const safeUserData = {
       id: data.user.id,
       email: data.user.email,
       name: userData?.userName || data.user.user_metadata?.name || data.user.user_metadata?.full_name || ''
-    };
-
-    // Chuyển đổi ISO Date String thành timestamp (seconds) cho phù hợp với model Flutter
-    const expiryDate = new Date(data.session.expires_at);
-    const expiryTimestamp = Math.floor(expiryDate.getTime() / 1000);
+    };    // Xử lý đúng expires_at để đảm bảo luôn trả về timestamp (seconds)
+    let expiryTimestamp;
+    
+    // Kiểm tra nếu expires_at là chuỗi ISO
+    if (typeof data.session.expires_at === 'string' && data.session.expires_at.includes('T')) {
+      const expiryDate = new Date(data.session.expires_at);
+      expiryTimestamp = Math.floor(expiryDate.getTime() / 1000);
+    } 
+    // Kiểm tra nếu expires_at đã là timestamp (giây)
+    else if (typeof data.session.expires_at === 'number') {
+      expiryTimestamp = data.session.expires_at;
+    }
+    // Trường hợp khác, sử dụng Unix timestamp hiện tại + 3 ngày
+    else {
+      expiryTimestamp = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 3; // Hiện tại + 3 ngày
+    }
 
     // Success response with access token
     return res.status(200).json({
@@ -759,6 +772,112 @@ router.post("/login-with-otp", async (req, res) => {
       code: 5016,
       httpStatus: 500,
       message: "Server error during login with OTP: " + error.message
+    });
+  }
+});
+
+// Get user security settings
+router.get("/security", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const deviceId = req.query.device_id; // hoặc dùng req.body nếu dùng POST
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        error: true,
+        success: false,
+        code: 4022,
+        httpStatus: 401,
+        message: "Authorization token is required"
+      });
+    }
+
+    if (!deviceId) {
+      return res.status(400).json({
+        error: true,
+        success: false,
+        code: 4024,
+        httpStatus: 400,
+        message: "Device ID is required"
+      });
+    }
+
+    const accessToken = authHeader.split(" ")[1];
+
+    // Verify the token with Supabase
+    const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
+
+    if (userError || !userData.user) {
+      return res.status(401).json({
+        error: true,
+        success: false,
+        code: 4023,
+        httpStatus: 401,
+        message: "Invalid or expired access token"
+      });
+    }
+
+    const userId = userData.user.id;
+
+    // Get 2FA status from 'users' table
+    const { data: securityData, error: fetchError } = await supabase
+      .from("users")
+      .select("twofactorenabled")
+      .eq("userId", userId)
+      .single();
+
+    if (fetchError) {
+      console.error("Error fetching 2FA data:", fetchError);
+      return res.status(500).json({
+        error: true,
+        success: false,
+        code: 5017,
+        httpStatus: 500,
+        message: "Error fetching 2FA settings"
+      });
+    }
+
+    // Check biometric device registration
+    const { data: biometricEntry, error: biometricError } = await supabase
+      .from("biometric_security")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("device_id", deviceId)
+      .maybeSingle();
+
+    if (biometricError) {
+      console.error("Error fetching biometric data:", biometricError);
+      return res.status(500).json({
+        error: true,
+        success: false,
+        code: 5019,
+        httpStatus: 500,
+        message: "Error checking biometric settings"
+      });
+    }
+
+    const isRegisterBiometric = !!biometricEntry;
+
+    return res.status(200).json({
+      error: false,
+      success: true,
+      code: 2014,
+      httpStatus: 200,
+      message: "Security settings retrieved successfully",
+      payload: {
+        userId,
+        twoFactorEnabled: securityData?.twofactorenabled || false,
+        biometricEnabled : isRegisterBiometric,
+      }
+    });
+  } catch (error) {
+    console.error("Security settings retrieval error:", error);
+    return res.status(500).json({
+      error: true,
+      success: false,
+      code: 5018,
+      httpStatus: 500,
+      message: "Server error while retrieving security settings"
     });
   }
 });
